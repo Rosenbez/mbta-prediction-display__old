@@ -23,7 +23,7 @@ ThinkInk_290_Grayscale4_T5 display(EPD_DC, EPD_RESET, EPD_CS, SRAM_CS, EPD_BUSY)
 const char * networkName = "xxxx";
 const char * networkPswd = "xxxx";
 
-String mbta_cert = \
+const char* mbta_cert = \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIFdTCCBF2gAwIBAgIQDAvzYU4R/Xer/aMF2n8RXzANBgkqhkiG9w0BAQsFADBG\n" \
 "MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRUwEwYDVQQLEwxTZXJ2ZXIg\n" \
@@ -67,6 +67,7 @@ const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = -18000;
 const int   daylightOffset_sec = 0;
 struct tm timeinfo;
+long StartTime;
 
 
 void setup() {
@@ -75,12 +76,14 @@ void setup() {
   while (!Serial) {
     delay(10);
   }
+  StartTime = millis();
   Serial.println("Begin program");
   connectToWiFi(networkName, networkPswd);
   //init and get the time
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   printLocalTime();
-  display.begin(THINKINK_GRAYSCALE4);
+  //display.begin(THINKINK_GRAYSCALE4);
+  display.begin(THINKINK_MONO);
   ScreenInit();
   sleep(20);
 
@@ -131,7 +134,7 @@ void ScreenInit() {
 }
 
 void parse_and_display(String &payload) {
-  StaticJsonDocument<3072> doc;
+  DynamicJsonDocument doc(6144);
 
   DeserializationError error = deserializeJson(doc, payload);
 
@@ -142,7 +145,7 @@ void parse_and_display(String &payload) {
   Serial.println();
   //serializeJsonPretty(doc, Serial);
   int i = 0;
-  StopPrediction predictions[10];
+  StopPrediction predictions[15];
   int num_predictions = 0;
   display.setTextSize(2);
 
@@ -156,6 +159,12 @@ void parse_and_display(String &payload) {
     const char* route_num = relationships["route"]["data"]["id"]; // "87", "88"
     const char* stop_id = relationships["stop"]["data"]["id"]; // "2579",
     predictions[i] = StopPrediction(route_num, stop_id, arrival_time);
+    if (String(route_num) == "88") {
+      predictions[i].set_via("Highlnd");
+    }
+    else if (String(route_num) == "87") {
+      predictions[i].set_via("Elm");
+    }
     i++;
     Serial.printf("Adding prediction %d \n", i);
     num_predictions++;
@@ -175,10 +184,18 @@ void write_predictions(StopPrediction predictions[], int num_predictions) {
     Serial.printf("set curser to y: %d \n", cursor_pos_y);
     Serial.println("write string to screen buff");
     int arriving_in = pred.get_countdown_min(timeinfo);
+    Serial.printf("On print object %d \n", s);
     if (arriving_in < 0) {
       continue;
     }
-    display.printf("Bus: %s %d Min", pred.route(), arriving_in);
+    if (line_number > 6) {
+      break;}
+    if (String(pred.via()) == "0") {
+      display.printf("Bus: %s %d Min", pred.route(), arriving_in);
+    }
+    else {
+      display.printf("Bus: %s %d Min v %s", pred.route(), arriving_in, pred.via());
+    }
     line_number++;
   }
 }
@@ -192,7 +209,7 @@ String get_mbta_prediction_json(int stop) {
   Serial.print("[HTTP] begin...\n");
   String mbta_query_url = "https://api-v3.mbta.com/predictions?filter[stop]=";
   mbta_query_url += stop;
-  http.begin(mbta_query_url, mbta_cert.c_str()); //HTTP
+  http.begin(mbta_query_url, mbta_cert); //HTTP
 
   Serial.print("[HTTP] GET...\n");
   // start connection and send HTTP header
@@ -273,4 +290,18 @@ void WiFiEvent(WiFiEvent_t event){
 void wifi_off() {
   connected = false;
   WiFi.disconnect(true);
+}
+
+void BeginSleep() {
+  // Function for deep sleep power savings - not implimented yet.
+  long SleepDuration = 60; // Sleep time in seconds, aligned to the nearest minute boundary, so if 30 will always update at 00 or 30 past the hour
+  int  WakeupTime    = 7;  // Don't wakeup until after 07:00 to save battery power
+  int  SleepTime     = 23; // Sleep after (23+1) 00:00 to save battery power
+  long SleepTimer = (SleepDuration ); //Some ESP32 are too fast to maintain accurate time
+  esp_sleep_enable_timer_wakeup((SleepTimer) * 1000000LL); // Added +20 seconnds to cover ESP32 RTC timer source inaccuracies
+
+  Serial.println("Entering " + String(SleepTimer) + "-secs of sleep time");
+  Serial.println("Awake for : " + String((millis() - StartTime) / 1000.0, 3) + "-secs");
+  Serial.println("Starting deep-sleep period...");
+  esp_deep_sleep_start();  // Sleep for e.g. 30 minutes
 }
