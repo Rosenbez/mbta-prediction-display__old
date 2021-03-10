@@ -84,12 +84,7 @@ void setup() {
   printLocalTime();
   //display.begin(THINKINK_GRAYSCALE4);
   display.begin(THINKINK_MONO);
-  ScreenInit();
-  sleep(20);
-
-}
-
-void loop() {
+  
   if (!connected) {
       connectToWiFi(networkName, networkPswd);
   }
@@ -100,7 +95,12 @@ void loop() {
   parse_and_display(mbta_data);
   display.display();
   wifi_off();
+  BeginSleep();
   sleep(60);
+
+}
+
+void loop() {
 
 }
 
