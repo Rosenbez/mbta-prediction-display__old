@@ -65,7 +65,7 @@ float voltage;
 
 const char* ntpServer = "pool.ntp.org";
 const long  gmtOffset_sec = -18000;
-const int   daylightOffset_sec = 0;
+const int   daylightOffset_sec = 3600;
 struct tm timeinfo;
 long StartTime;
 
